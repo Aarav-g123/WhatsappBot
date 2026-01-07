@@ -38,6 +38,7 @@ def main():
         confront_score = confront_by_author.get(author, 0.0)
         pos_info = pos_by_author.get(author, {"nouns": [], "verbs": [], "adjectives": []})
         bad_words = bad_words_by_author.get(author, [])
+        hourly_activity = stats.get("Hourly activity", [0] * 24)
 
         html = author_html(
             author,
@@ -48,6 +49,7 @@ def main():
             confront_score,
             pos_info,
             bad_words,
+            hourly_activity,
         )
 
         safe_name = "".join(

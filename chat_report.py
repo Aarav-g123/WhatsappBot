@@ -1,5 +1,5 @@
 # chat_report.py
-from typing import Dict
+from typing import Dict, List
 
 
 def _escape(s: str) -> str:
@@ -19,6 +19,7 @@ def author_html(
     confront_score: float,
     pos_info: Dict[str, list],
     bad_words: list,
+    hourly_activity: List[float],
 ) -> str:
     days_sorted = sorted(daily_counts.items())
     labels = [d for d, _ in days_sorted]
@@ -32,19 +33,23 @@ def author_html(
     peak_hour = int(stats.get("Peak message hour", 0))
     peak_time = f"{peak_hour:02d}:00"
 
+    hour_labels = ",".join(f"'{i:02d}:00'" for i in range(24))
+    hour_values = ",".join(str(v) for v in hourly_activity)
+
     stats_rows = "".join(
-        f"<tr><th>{_escape(k)}</th><td>{v}{' (Peak time)' if k=='Peak message hour' else ''}</td></tr>"
-        for k, v in stats.items()
+        f"<tr><th>{_escape(k)}</th><td>{v}</td></tr>"
+        for k, v in sorted(stats.items()) if k != "Hourly activity"
     )
 
     words_rows = "".join(
         f"<tr><td>{_escape(w)}</td><td>{c}</td></tr>" for w, c in words_sorted
     )
 
-    emo_labels = ["Happiness", "Sadness", "Confrontational"]
+    emo_labels = ["Happiness", "Sadness", "Anger", "Confrontational"]
     emo_values = [
         sentiment.get("Happiness", 0.0),
         sentiment.get("Sadness", 0.0),
+        sentiment.get("Anger", 0.0),
         confront_score,
     ]
     emo_labels_js = ",".join(f"'{k}'" for k in emo_labels)
@@ -90,6 +95,9 @@ def author_html(
       gap: 20px;
       margin-bottom: 24px;
     }}
+    .full-width {{
+      grid-column: 1 / -1;
+    }}
     .card {{
       background: white;
       border-radius: 12px;
@@ -129,7 +137,7 @@ def author_html(
       font-size: 12px;
     }}
     canvas {{
-      max-height: 260px;
+      max-height: 300px;
     }}
     .note {{
       font-size: 12px;
@@ -178,6 +186,13 @@ def author_html(
       </section>
     </div>
 
+    <section class="grid">
+      <section class="card full-width">
+        <h2>Messages by hour (normalized)</h2>
+        <canvas id="hourlyChart" height="120"></canvas>
+      </section>
+    </section>
+
     <div class="grid">
       <section class="card">
         <h2>Messages over time</h2>
@@ -185,7 +200,7 @@ def author_html(
       </section>
       <section class="card">
         <h2>Emotion profile</h2>
-        <canvas id="sentChart" height="80"></canvas>
+        <canvas id="sentChart" height="120"></canvas>
       </section>
     </div>
   </main>
@@ -213,22 +228,35 @@ def author_html(
         responsive: true,
         maintainAspectRatio: false,
         scales: {{
-          x: {{
-            ticks: {{
-              maxRotation: 45,
-              minRotation: 45,
-              autoSkip: true,
-              maxTicksLimit: 12,
-            }}
-          }},
-          y: {{
-            beginAtZero: true,
-            precision: 0,
-          }}
+          x: {{ ticks: {{ maxRotation: 45, minRotation: 45, autoSkip: true, maxTicksLimit: 12 }} }},
+          y: {{ beginAtZero: true, precision: 0 }}
         }},
-        plugins: {{
-          legend: {{ display: false }},
+        plugins: {{ legend: {{ display: false }} }}
+      }}
+    }});
+
+    const hourLabels = [{hour_labels}];
+    const hourData = [{hour_values}];
+    const ctxHour = document.getElementById('hourlyChart').getContext('2d');
+    new Chart(ctxHour, {{
+      type: 'bar',
+      data: {{
+        labels: hourLabels,
+        datasets: [{{
+          label: 'Normalized activity',
+          data: hourData,
+          backgroundColor: 'rgba(34,197,94,0.6)',
+          borderColor: '#22c55e',
+          borderWidth: 1,
+        }}]
+      }},
+      options: {{
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {{
+          y: {{ beginAtZero: true, max: 1 }}
         }},
+        plugins: {{ legend: {{ display: false }} }}
       }}
     }});
 
@@ -251,15 +279,8 @@ def author_html(
       options: {{
         responsive: true,
         maintainAspectRatio: false,
-        scales: {{
-          r: {{
-            beginAtZero: true,
-            suggestedMax: 1,
-          }}
-        }},
-        plugins: {{
-          legend: {{ display: false }},
-        }},
+        scales: {{ r: {{ beginAtZero: true, suggestedMax: 1 }} }},
+        plugins: {{ legend: {{ display: false }} }}
       }}
     }});
   </script>

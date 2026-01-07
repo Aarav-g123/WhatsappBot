@@ -1,6 +1,6 @@
 # chat_stats.py
 from collections import defaultdict, Counter
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from chat_parser import Message
 
@@ -56,7 +56,9 @@ def basic_stats(msgs: List[Message]) -> Dict[str, Dict[str, float]]:
         hour_counts = [0] * 24
         for t in times:
             hour_counts[t.hour] += 1
-        peak_hour = hour_counts.index(max(hour_counts)) if hour_counts else 0
+        total_msgs = sum(hour_counts)
+        peak_hour = hour_counts.index(max(hour_counts)) if hour_counts and total_msgs > 0 else 0
+        normalized_hours = [round(c / total_msgs, 3) for c in hour_counts] if total_msgs > 0 else [0] * 24
 
         out[author] = {
             "Total messages": float(len(lst_sorted)),
@@ -72,6 +74,7 @@ def basic_stats(msgs: List[Message]) -> Dict[str, Dict[str, float]]:
             ),
             "Active span (days)": round(active_span_days, 2),
             "Peak message hour": float(peak_hour),
+            "Hourly activity": normalized_hours,
         }
 
     return out
@@ -89,14 +92,15 @@ COMMON_STOP = {
     "the","and","a","an","to","of","in","on","for","with","at","by","from",
     "is","am","are","was","were","be","been","being","do","does","did",
     "have","has","had","will","would","can","could","should","shall","may",
-    "you","u","i","im","i'm","me","my","mine","we","our","ours",
+    "you","u","ur","i","im","i'm","me","my","mine","we","our","ours",
     "he","she","it","they","them","their","theirs","his","her","hers",
     "this","that","these","those","here","there","then","than",
     "so","but","or","if","as","because","when","while","what","which","who",
-    "how","why",
+    "how","why","gon","na","yh","cld",
     "like","really","just","literally","kinda","sorta","maybe","probably",
     "thing","things","stuff","okay","ok","yeah","yep","nope",
 }
+
 
 
 def word_frequencies(msgs: List[Message]) -> Dict[str, Counter]:
@@ -126,6 +130,7 @@ def sentiment_scores(msgs: List[Message]) -> Dict[str, Dict[str, float]]:
         vs = sia.polarity_scores(txt)
         sums[m.author]["Happiness"] += vs["pos"]
         sums[m.author]["Sadness"] += vs["neg"]
+        sums[m.author]["Anger"] += vs["neg"]
         sums[m.author]["Overall"] += vs["compound"]
         counts[m.author] += 1
 
@@ -137,6 +142,7 @@ def sentiment_scores(msgs: List[Message]) -> Dict[str, Dict[str, float]]:
         norm = {k: round(v / max_val, 3) for k, v in avg.items()}
         out[author] = norm
     return out
+
 
 
 def confrontational_index(msgs: List[Message]) -> Dict[str, float]:
@@ -220,9 +226,24 @@ def words_not_to_say(
     msgs: List[Message], min_total: float = 0.5
 ) -> Dict[str, List[str]]:
     import re
+    import nltk
+    from nltk.corpus import stopwords
     from nltk.sentiment import SentimentIntensityAnalyzer
 
     sia = SentimentIntensityAnalyzer()
+    nltk_stopwords = set(stopwords.words('english'))
+
+    all_words = Counter()
+    for m in msgs:
+        txt = m.text.strip()
+        if not txt:
+            continue
+        words = re.findall(r"[A-Za-z']+", txt.lower())
+        words = [w for w in words if w not in COMMON_STOP and w not in nltk_stopwords]
+        all_words.update(words)
+
+    global_high_freq = set([w for w, c in all_words.most_common(100)])
+
     word_scores = defaultdict(lambda: defaultdict(float))
 
     for m in msgs:
@@ -234,7 +255,7 @@ def words_not_to_say(
         if neg_score <= 0:
             continue
         words = re.findall(r"[A-Za-z']+", txt)
-        words = [w for w in words if w not in COMMON_STOP]
+        words = [w for w in words if w not in COMMON_STOP and w not in nltk_stopwords and w not in global_high_freq]
         if not words:
             continue
         per_word = neg_score / len(words)
