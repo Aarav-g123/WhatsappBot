@@ -29,8 +29,12 @@ def author_html(
 
     words_sorted = sorted(top_words.items(), key=lambda x: -x[1])[:10]
 
+    peak_hour = int(stats.get("Peak message hour", 0))
+    peak_time = f"{peak_hour:02d}:00"
+
     stats_rows = "".join(
-        f"<tr><th>{_escape(k)}</th><td>{v}</td></tr>" for k, v in stats.items()
+        f"<tr><th>{_escape(k)}</th><td>{v}{' (Peak time)' if k=='Peak message hour' else ''}</td></tr>"
+        for k, v in stats.items()
     )
 
     words_rows = "".join(
@@ -146,11 +150,11 @@ def author_html(
   <header>
     <div class="tag">Chat analytics</div>
     <h1>{_escape(author)}</h1>
-    <div>Confrontational index: {confront_score}</div>
+    <div>Most active at {peak_time} | Confrontational index: {confront_score}</div>
   </header>
   <main>
     <p class="note">
-      Word stats exclude a curated list of common function and filler words.
+      POS stats exclude globally high-frequency English words.
     </p>
     <div class="grid">
       <section class="card">

@@ -53,6 +53,11 @@ def basic_stats(msgs: List[Message]) -> Dict[str, Dict[str, float]]:
             else 0.0
         )
 
+        hour_counts = [0] * 24
+        for t in times:
+            hour_counts[t.hour] += 1
+        peak_hour = hour_counts.index(max(hour_counts)) if hour_counts else 0
+
         out[author] = {
             "Total messages": float(len(lst_sorted)),
             "Average words per message": round(
@@ -66,6 +71,7 @@ def basic_stats(msgs: List[Message]) -> Dict[str, Dict[str, float]]:
                 sum(1 for g in silences if g > median_gap * 3)
             ),
             "Active span (days)": round(active_span_days, 2),
+            "Peak message hour": float(peak_hour),
         }
 
     return out
@@ -156,11 +162,23 @@ def confrontational_index(msgs: List[Message]) -> Dict[str, float]:
     return out
 
 
-def pos_stats(
-    msgs: List[Message], top_k: int = 10
-) -> Dict[str, Dict[str, List[str]]]:
+def pos_stats(msgs: List[Message], top_k: int = 10) -> Dict[str, Dict[str, List[str]]]:
     import re
     import nltk
+    from nltk.corpus import stopwords
+
+    all_words = Counter()
+    nltk_stopwords = set(stopwords.words('english'))
+
+    for m in msgs:
+        txt = m.text.strip()
+        if not txt:
+            continue
+        words = re.findall(r"[A-Za-z']+", txt.lower())
+        words = [w for w in words if w not in COMMON_STOP and w not in nltk_stopwords]
+        all_words.update(words)
+
+    global_high_freq = set([w for w, c in all_words.most_common(100)])
 
     by_author_tokens = defaultdict(list)
 
@@ -170,7 +188,7 @@ def pos_stats(
             continue
         tokens = nltk.word_tokenize(txt)
         tokens = [t.lower() for t in tokens if t.isalpha()]
-        tokens = [t for t in tokens if t not in COMMON_STOP]
+        tokens = [t for t in tokens if t not in COMMON_STOP and t not in nltk_stopwords and t not in global_high_freq]
         by_author_tokens[m.author].extend(tokens)
 
     out: Dict[str, Dict[str, List[str]]] = {}
